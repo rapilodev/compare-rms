@@ -10,7 +10,7 @@ use strict;
 
 my $ffmpeg= "$ENV{HOME}/ffmpeg/bin/ffmpeg";
 
-my $ladspa_plugin = 'ebur128-leveler-6s';
+my $ladspa_plugin = 'rms-leveler-6s';
 my $label = $ladspa_plugin =~ s/-/_/gr;
 $ladspa_plugin .= ":$label";
 #^ ebur128-leveler-6s:ebur128_leveler_6s
