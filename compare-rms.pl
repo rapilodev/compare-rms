@@ -10,7 +10,7 @@ my $tempDir = '/tmp';
 
 my $minRms     = -50;
 my $resolution = 3;
-my $size       = '4000,4000';
+my $size       = '1000,1000';
 my $template   = undef;
 my $help       = undef;
 my $verbose    = undef;
@@ -151,37 +151,80 @@ sub buildDataFile {
 sub compareRms {
 	my $dataFileMerge = shift;
 
-	my $oldTime = 0;
 	my $sum1    = 0;
 	my $sum2    = 0;
 	my $sum3    = 0;
 	my $n       = 0;
+    my $noise   = -50;
+
+    my ($oldTime, $oldL1, $oldR1, $oldL2, $oldR2, $oldL3, $oldR3 );
+
 	open my $file, "<", $dataFileMerge;
+
 	while (<$file>) {
 		my $line = $_;
+        print $line;
+
 		chomp $line;
 		my ( $time, $l1, $r1, $l2, $r2, $l3, $r3 ) = split( /\s+/, $line );
+
+        if ($n==0){
+            $oldTime = $time;
+            $oldL1 = $l1;
+            $oldL2 = $l2;
+            $oldL3 = $l3;
+
+            $oldR1 = $r1;
+            $oldR2 = $r2;
+            $oldR3 = $r3;
+        }
+
 		my $dtime = $time - $oldTime;
-		$dtime = 0.0000000001 if $dtime == 0;
-		my $dl1 = abs( ( $l1 - $l2 ) / $dtime );
-		my $dr1 = abs( ( $r1 - $r2 ) / $dtime );
-		my $dl2 = abs( ( $l1 - $l3 ) / $dtime );
-		my $dr2 = abs( ( $r1 - $r3 ) / $dtime );
-		my $dl3 = abs( ( $l2 - $l3 ) / $dtime );
-		my $dr3 = abs( ( $r2 - $r3 ) / $dtime );
-		$sum1 += ( $dl1 + $dr1 ) / 2;
-		$sum2 += ( $dl2 + $dr2 ) / 2;
-		$sum3 += ( $dl3 + $dr3 ) / 2;
-		my $oldTime = $time;
-		$n++;
+		$dtime = 0.1 if $dtime == 0;
+
+        my $dl1 = abs( $l1 - $oldL1);
+        my $dl2 = abs( $l2 - $oldL2);
+        my $dl3 = abs( $l3 - $oldL3);
+
+        my $dr1 = abs( $r1 - $oldR1);
+        my $dr2 = abs( $r2 - $oldR2);
+        my $dr3 = abs( $r3 - $oldR3);
+
+		$sum1 += abs( ( $dl1 - $dl2 ) / $dtime ) if ($l1>$noise) || ($l2>$noise);
+		$sum1 += abs( ( $dr1 - $dr2 ) / $dtime ) if ($r1>$noise) || ($r2>$noise);
+
+		$sum2 += abs( ( $dl1 - $dl3 ) / $dtime ) if ($l1>$noise) || ($l3>$noise);
+		$sum2 += abs( ( $dr1 - $dr3 ) / $dtime ) if ($r1>$noise) || ($r3>$noise);
+
+		$sum3 += abs( ( $dl2 - $dl3 ) / $dtime ) if ($l2>$noise) || ($l3>$noise);
+		$sum3 += abs( ( $dr2 - $dr3 ) / $dtime ) if ($r2>$noise) || ($r3>$noise);
+
+		$n += $dtime;
+		$oldTime = $time;
+
+        $oldL1 = $l1;
+        $oldL2 = $l2;
+        $oldL3 = $l3;
+
+        $oldR1 = $r1;
+        $oldR2 = $r2;
+        $oldR3 = $r3;
+
 	}
 	close $file;
-	$sum1 /= $n if $n != 0;
-	$sum2 /= $n if $n != 0;
-	$sum3 /= $n if $n != 0;
+
+	#$sum1 *= 1000;
+	#$sum2 *= 1000;
+	#$sum3 *= 1000;
+
+
+	#$sum1 /= $n if $n != 0;
+	#$sum2 /= $n if $n != 0;
+	#$sum3 /= $n if $n != 0;
+
 	printf ("SUM A-B: %.03f\n" , $sum1);
 	printf ("SUM A-C: %.03f\n" , $sum2);
-	printf ("SUM C-B: %.03f\n" , $sum3);
+    printf ("DELTA: %.03f\n" , abs($sum1 - $sum2));
 }
 
 sub mergeDataFiles {
@@ -252,7 +295,7 @@ sub plot {
 		my $ytics2   = '-16,4';
 
 		my $plot = qq{
-            set terminal png background rgb 'black' truecolor nocrop enhanced size $size font "Droid Sans,8" 
+            set terminal png background rgb 'black' truecolor nocrop enhanced size $size font "Droid Sans,8"
             set output "$pngFile";
      		set multiplot layout 6,1
             set border lc rgb '#f0f0f0f0'
@@ -340,6 +383,7 @@ sub plot {
 	print STDERR "rmsPlot='$pngFile'\n";
 }
 
+# plot deltas only
 sub plot2 {
 	my $plotFile      = shift;
 	my $dataFile1     = shift;
@@ -366,7 +410,7 @@ sub plot2 {
 		my $ytics2   = '-16,4';
 
 		my $plot = qq{
-            set terminal png background rgb 'black' truecolor nocrop enhanced size $size font "Droid Sans,8" 
+            set terminal png background rgb 'black' truecolor nocrop enhanced size $size font "Droid Sans,8"
             set output "$pngFile";
      		set multiplot layout 3,1
             set border lc rgb '#f0f0f0f0'
@@ -431,14 +475,14 @@ DESCRIPTION:
 compareRms will parse audio input and calculate RMS values for a given duration.
 The results are plotted to an PNG image.
 
-Usage: rms [OPTION...] audioFile
+Usage: compareRms [OPTION...] <audio>
 
 OPTIONS:
-    -i --input  audio       path of any audio or video file to be plotted
-    -o --output image       path of target PNG file, if ommited use audioFile.png
-    -r --resolution VALUE   RMS resolution for each line of output in seconds, default is 1.5
+    -i --input  <audio>     path of any audio or video file to be plotted
+    -o --output <image>     path of target PNG file, if ommited use <audio>.png
+    -r --resolution <value> RMS resolution for each line of output in seconds, default is 1.5
     -l --limit              cut off RMS values lower than limit in dB, default is -36
-    -t --template FILE      use given gnuplot template file instead of build-in template
+    -t --template <file>    use given gnuplot template file instead of build-in template
     -v --verbose            verbose output
     -h --help               this help
     --no-delete             do not delete files
@@ -460,4 +504,3 @@ END {
 	unlink $rmsFile3  if ( defined $rmsFile3 )  && ( -e $rmsFile3 );
 	unlink $plotFile  if ( defined $plotFile )  && ( -e $plotFile );
 }
-
